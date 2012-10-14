@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+    <!-- type: a string that cannot be empty -->
+    <xs:simpleType name="notEmptyString">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:group name="splitAuthors">
+        <xs:sequence>
+            <xs:element name="split"  type="xs:positiveInteger"/>
+            <xs:element name="author" type="notEmptyString" minOccurs="2" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:group>
+    
+    <!-- root of the document -->
+    <xs:element name="album">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:choice>
+                    <xs:element name="author" type="notEmptyString"/>
+                    <xs:group ref="splitAuthors"/>
+                </xs:choice>
+                <xs:element name="title"  type="notEmptyString"/>
+                <xs:element name="year"   type="xs:positiveInteger"/>
+                <xs:element name="genre">
+                    <xs:simpleType>
+                        <xs:restriction base="xs:string">
+                            {{#genres}}
+                            <xs:enumeration value="{{genre}}"/>
+                            {{/genres}}
+                        </xs:restriction>
+                    </xs:simpleType>
+                </xs:element>
+                <!-- if the album has only one disc,
+                then only the <tracklist> element is required,
+                else the document must have al least two <disc> elements,
+                each having a <title> attribute and containing a <tracklist> element -->
+                <xs:choice>
+                    <xs:element name="tracklist" type="notEmptyString"/>
+                    <xs:element name="disc"      minOccurs="2" maxOccurs="unbounded">
+                        <xs:complexType>
+                            <xs:simpleContent>
+                                <xs:extension base="notEmptyString">
+                                    <xs:attribute name="title" type="notEmptyString"/>
+                                </xs:extension>
+                            </xs:simpleContent>
+                        </xs:complexType>
+                    </xs:element>
+                </xs:choice>
+                <!-- split is used only for albums that have two authors -->
+                <!--<xs:element name="split"  type="xs:positiveInteger" minOccurs="0"/>-->
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+</xs:schema>

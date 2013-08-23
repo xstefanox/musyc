@@ -55,9 +55,8 @@ import mimetypes
 import xml.dom.minidom
 import lxml.etree
 import mutagen
-
-
-#from xspf import Xspf, Track
+import yaml
+import xspf
 
 
 #############
@@ -69,9 +68,6 @@ BAD_CHARACTERS = re.compile(r"[ \!\?\|\*\<\>\/\n\r\\:\&]")
 
 BAD_LINE_ENDINGS = re.compile(r"\r(?!\n)|(?<!\r)\n")
 
-# @TODO: unused, remove?
-UNIX_NEWLINES = re.compile(r"[^\r]\n")
-
 METADATA_FILE = u"metadata.xml"
 
 COVER_IMAGE = u"folder.jpg"
@@ -80,13 +76,14 @@ THUMBNAIL_IMAGE = u"thumb.jpg"
 
 METADATA_XML_TEMPLATE = unicode(open(os.path.join(os.path.dirname(musyc.__file__), METADATA_FILE), 'r').read())
 
-VALID_GENRES = tuple(sorted([ g.replace('\n', '') for g in open(os.path.join(os.path.dirname(musyc.__file__), 'valid_genres.list'), 'r').readlines() if g != '\n' ]))
+VALID_GENRES = tuple(sorted(yaml.load(open(os.path.join(os.path.dirname(musyc.__file__), 'valid_genres.yml')))))
 
-VALID_MIME_TYPES = tuple(sorted([ g.replace('\n', '') for g in open(os.path.join(os.path.dirname(musyc.__file__), 'valid_mime_types.list'), 'r').readlines() if g != '\n' ]))
+VALID_MIME_TYPES = tuple(sorted(yaml.load(open(os.path.join(os.path.dirname(musyc.__file__), 'valid_mime_types.yml')))))
 
 ALBUM_XSD = lxml.etree.XMLSchema(lxml.etree.XML(pystache.render(open(os.path.join(os.path.dirname(musyc.__file__), 'album.xsd.mustache'), 'r').read(), { 'genres': [ { 'genre': g } for g in VALID_GENRES ] })))
 
 del g
+
 
 ##################
 # UTIL FUNCTIONS #
@@ -128,148 +125,6 @@ def print_item(msg):
 ####################
 # ALBUM MANAGEMENT #
 ####################
-
-
-class CommandProcessor:
-
-    def __init__(self, cmdline):
-        if len(cmdline) == 1:
-            self.command = getattr(self.__class__, "help")
-            self.args = None
-        else:
-            self.command = cmdline[1]
-            # se non e' stato fornito un path
-            if len(cmdline[2:]) == 0:
-                # usa la directory corrente
-                self.targetdir = os.getcwd()
-            else:
-                self.targetdir = cmdline[2]
-            # controlla se la directory esiste
-            if not os.path.isdir(self.targetdir):
-                raise Exception("Il percorso fornito non e' una directory")
-            # salva gli altri argomenti
-            self.args = cmdline[3:]
-            # se il comando inizia con "__", allora non e' valido
-            if self.command.startswith("__"):
-                raise Exception("Comando non supportato")
-            # se il comando non e' un metodo di questa classe,
-            # allora non e' valido
-            try:
-                self.command = getattr(self.__class__, self.command)
-            except AttributeError:
-                raise Exception("Comando non supportato")
-        # converti a Unicode tutte le stringhe:
-        # cmd potrebbe essere un metodo, quindi occorre controllare se e' una stringa
-        if isinstance(self.command, str):
-            self.command = unicode(self.command, "utf-8")
-        # targetdir potrebbe non esistere
-        if "targetdir" in dir(self):
-            self.targetdir = unicode(self.targetdir, "utf-8")
-        # args potrebbe essere None
-        if self.args:
-            self.args =  map(lambda arg: unicode(arg, "utf-8"), self.args)
-
-
-    def convert(self):
-
-        '''Converte i vecchi file di configurazione nei nuovi'''
-        
-        raise Exception('Not implemented')
-        
-        # se il file di configurazione non esiste
-        oldconfig = os.path.join(self.targetdir, "metadata.xml")
-        
-        if not os.path.isfile(oldconfig):
-            return
-        
-        album = Album(self.targetdir)
-        
-        x = Xspf()
-        x.title = album.title
-        x.creator = album.author
-        x.date = album.year
-        
-        for idx, f in enumerate(album.audiofiles):
-            tr = Track()
-            tr.title = album.tracklist[idx]
-            x.add_track(tr)
-        
-        print(xml.dom.minidom.parseString(x.toXml()).toprettyxml())
-        
-        return
-#        # se il file contenente la tracklist non esiste
-#        oldtracklist = os.path.join(self.targetdir, "tracklist.txt")
-#        if not os.path.isfile(oldtracklist):
-#            raise Exception("Il vecchio file contenente la tracklist non esiste")
-
-        ( autore , titolo , anno , genere , split ) = subprocess.Popen("source \"" + oldconfig + "\" && /bin/echo -n \"$AUTORE\n$TITOLO\n$ANNO\n$GENERE\n$SPLIT\n\"", shell = True, stdout = subprocess.PIPE).communicate()[0].splitlines()
-
-        # converti in Unicode
-        autore = unicode(autore, "utf-8")
-        titolo = unicode(titolo, "utf-8")
-        genere = unicode(genere, "utf-8")
-        
-        # crea il file di configurazione vuoto
-        new_config = xml.dom.minidom.parseString(METADATA_XML_TEMPLATE)
-
-        # inserisci il titolo
-        title_element = new_config.getElementsByTagName("title")[0]
-        title_element.appendChild(new_config.createTextNode(titolo))
-
-        # inserisci l'anno
-        new_config.getElementsByTagName("year")[0].appendChild(new_config.createTextNode(anno))
-
-        # inserisci il genere
-        new_config.getElementsByTagName("genre")[0].appendChild(new_config.createTextNode(genere))
-
-        author_elements = new_config.getElementsByTagName("author")
-
-        # se l'album e' uno split
-        if len(split) != 0:
-            # prepara la lista degli autori
-            autore = map(lambda x: x.strip(), autore.split("&"))
-            # inserisci il secondo autore
-            second_author_element = author_elements[0]
-            second_author_element.appendChild(new_config.createTextNode(autore[1]))
-            space_element = new_config.createTextNode("\n    ")
-            new_config.documentElement.insertBefore(space_element, second_author_element)
-            # inserisci il primo autore
-            first_author_element = new_config.createElement("author")
-            first_author_element.appendChild(new_config.createTextNode(autore[0]))
-            new_config.documentElement.insertBefore(first_author_element, space_element)
-            space_element = new_config.createTextNode("\n    ")
-            new_config.documentElement.insertBefore(space_element, first_author_element)
-            # inserisci l'elemento <split>
-            split_element = new_config.createElement("split")
-            split_element.appendChild(new_config.createTextNode(split))
-            new_config.documentElement.insertBefore(split_element, space_element)
-        else:
-            # inserisci l'unico autore
-            author_elements[0].appendChild(new_config.createTextNode(autore))
-
-        # leggi la tracklist
-        tracklist = open(oldtracklist, "r").read()
-        # rimuovi le linee vuote
-        tracklist = filter(lambda x: len(x) != 0, tracklist.splitlines())
-        tracklist = reduce(lambda x,y: x + "\n" + y, tracklist)
-        # inserisci 4 spazi all'inizio della stringa
-        tracklist = "    " + tracklist
-        # inserisci 8 spazi alla fine di ogni riga
-        tracklist = tracklist.replace("\n", "\n        ")
-        # inserisci 4 spazi alla fine della stringa
-        tracklist = tracklist + "\n    "
-        # converti in Unicode
-        tracklist = unicode(tracklist, "utf-8")
-        # inserisci la tracklist
-        new_config.getElementsByTagName("tracklist")[0].appendChild(new_config.createTextNode(tracklist))
-
-        # scrivi il file
-        out = open(METADATA_FILE, "w")
-        new_config_string = new_config.toxml().replace("<album>", "\n\n<album>")
-        #print new_config_string
-        out.write(new_config_string.encode("utf-8"))
-
-
 
 
 class Album:
@@ -463,6 +318,7 @@ class Album:
                 # rinomina il file
                 os.rename(audiofiles[item], new_track_name)
 
+
     def create_thumbnail(self):
 
         '''Crea la miniatura della cover (64x64)'''
@@ -482,6 +338,7 @@ class Album:
 
         thumb = cover.resize((dest_width, dest_height), Image.ANTIALIAS)
         thumb.save(self.thumbnail_image)
+
 
     def check_metadata(self):
 
@@ -589,6 +446,19 @@ class Album:
         #self.create_thumbnail()
         
 
+    def dump(self):
+        
+        x = xspf.Xspf()
+        x.title = self.title
+        x.creator = self.author
+        x.date = self.year
+ 
+        for track in self.tracklist:
+            x.add_track(xspf.Track(title = track))
+ 
+        print xml.dom.minidom.parseString(re.sub(r'(:)?ns0(:)?', '', x.toXml())).toprettyxml()
+        
+        
     def __get_audiofiles(self):
 
         # trova tutti i file audio
@@ -667,6 +537,23 @@ class ActionExecutor:
         Album(path).check()
 
 
+    def infer_album(self, args):
+        
+        '''Infer the tracklist'''
+        
+        if not os.path.isdir(args.path):
+            raise argparse.ArgumentError("'{0}' is not a valid path".format(args.path))
+
+        if not os.access(args.path, os.R_OK):
+            raise argparse.ArgumentError("'{0}' is not a readable dir".format(args.path))
+        
+        for track in sorted(os.listdir(args.path)):
+            
+            if re.match('.*\.(mp3|m4a|ogg)$', track):
+                
+                print(os.path.splitext(track[int(args.chars):])[0].replace('_', ' ').capitalize())
+
+
     def check_library(self, args):
 
         '''Perform a consistency check on the given library'''
@@ -689,7 +576,7 @@ class ActionExecutor:
 
     def test(self, args):
 
-        '''Test the progamme (used for debugging)'''
+        '''Test the progam (used for debugging)'''
 
         # check if the global variables contain Unicode strings
         print("### Checking global variables")
@@ -749,6 +636,28 @@ class ActionExecutor:
         shutil.rmtree(tmp_album_dir)
 
 
+    def convert(self, args):
+        
+        raise Exception('Not implemented')
+
+
+    def dump(self, args):
+
+        '''Perform a consistency check on the given album'''
+    
+        if not os.path.isdir(args.path):
+            raise argparse.ArgumentError("'{0}' is not a valid path".format(args.path))
+
+        if not os.access(args.path, os.R_OK):
+            raise argparse.ArgumentError("'{0}' is not a readable dir".format(args.path))
+
+        # determine the path to the metadata file
+        path = unicode(os.path.realpath(args.path), "utf-8")
+        
+        # create the Album object
+        Album(path).dump()
+
+
 ########################
 # COMMAND LINE PARSING #
 ########################
@@ -773,6 +682,8 @@ class ArgumentParser(argparse.ArgumentParser):
         if not hasattr(self, 'subparsers'):
             self.subparsers = self.add_subparsers(title = 'subcommands', help = 'Additional help')
 
+            #self.add_argument('--trace', help = 'Show the stack trace in case of errors')
+            
             init_parser = self.subparsers.add_parser('init')
             init_parser.add_argument('--path', help = 'Specify target path', default = '.')
             init_parser.set_defaults(func = ns.init_album)
@@ -780,19 +691,31 @@ class ArgumentParser(argparse.ArgumentParser):
             check_parser = self.subparsers.add_parser('check')
             check_parser.add_argument('--path', help = 'Specify target path', default = '.')
             check_parser.set_defaults(func = ns.check_album)
+            
+            infer_parser = self.subparsers.add_parser('infer')
+            infer_parser.add_argument('--path', help = 'Specify target path', default = '.')
+            infer_parser.add_argument('chars', help = 'Specify the number of characters to remove from the beginning of the file name', default = '.')
+            infer_parser.set_defaults(func = ns.infer_album)
         
-            check_parser = self.subparsers.add_parser('checklibrary')
-            check_parser.add_argument('--path', help = 'Specify target path', default = '.')
-            check_parser.set_defaults(func = ns.check_library)
+            check_library_parser = self.subparsers.add_parser('checklibrary')
+            check_library_parser.add_argument('--path', help = 'Specify target path', default = '.')
+            check_library_parser.set_defaults(func = ns.check_library)
         
-            check_parser = self.subparsers.add_parser('genres')
-            check_parser.set_defaults(func = ns.print_genres)
+            genres_parser = self.subparsers.add_parser('genres')
+            genres_parser.set_defaults(func = ns.print_genres)
         
-            check_parser = self.subparsers.add_parser('commands')
-            check_parser.set_defaults(func = ns.print_commands)
+            commands_parser = self.subparsers.add_parser('commands')
+            commands_parser.set_defaults(func = ns.print_commands)
         
-            check_parser = self.subparsers.add_parser('test')
-            check_parser.set_defaults(func = ns.test)
+            convert_parser = self.subparsers.add_parser('convert')
+            convert_parser.set_defaults(func = ns.convert)
+        
+            dump_parser = self.subparsers.add_parser('dump')
+            dump_parser.add_argument('--path', help = 'Specify target path', default = '.')
+            dump_parser.set_defaults(func = ns.dump)
+        
+            test_parser = self.subparsers.add_parser('test')
+            test_parser.set_defaults(func = ns.test)
         
         args = self.parse_args(sys.argv[1:], ns)
         args.func(args)
@@ -814,7 +737,7 @@ if __name__ == "__main__":
         print(termcolor.colored('!!! ', 'red', attrs = [ 'bold' ]) + unicode(e))
 
         # print the stack trace
-        traceback.print_exc(file = sys.stdout)
+        #traceback.print_exc(file = sys.stdout)
 
         # exit to the system, returning an error
         sys.exit(1)

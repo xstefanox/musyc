@@ -36,7 +36,6 @@ __version__ = u'0.9-beta2'
 ################
 
 
-import musyc
 import sys
 import argparse
 import traceback
@@ -74,13 +73,13 @@ COVER_IMAGE = u"folder.jpg"
 
 THUMBNAIL_IMAGE = u"thumb.jpg"
 
-METADATA_XML_TEMPLATE = unicode(open(os.path.join(os.path.dirname(musyc.__file__), METADATA_FILE), 'r').read())
+METADATA_XML_TEMPLATE = unicode(open(os.path.join(os.path.dirname(__file__), METADATA_FILE), 'r').read())
 
-VALID_GENRES = tuple(sorted(yaml.load(open(os.path.join(os.path.dirname(musyc.__file__), 'valid_genres.yml')))))
+VALID_GENRES = tuple(sorted(yaml.load(open(os.path.join(os.path.dirname(__file__), 'valid_genres.yml')))))
 
-VALID_MIME_TYPES = tuple(sorted(yaml.load(open(os.path.join(os.path.dirname(musyc.__file__), 'valid_mime_types.yml')))))
+VALID_MIME_TYPES = tuple(sorted(yaml.load(open(os.path.join(os.path.dirname(__file__), 'valid_mime_types.yml')))))
 
-ALBUM_XSD = lxml.etree.XMLSchema(lxml.etree.XML(pystache.render(open(os.path.join(os.path.dirname(musyc.__file__), 'album.xsd.mustache'), 'r').read(), { 'genres': [ { 'genre': g } for g in VALID_GENRES ] })))
+ALBUM_XSD = lxml.etree.XMLSchema(lxml.etree.XML(pystache.render(open(os.path.join(os.path.dirname(__file__), 'album.xsd.mustache'), 'r').read(), { 'genres': [ { 'genre': g } for g in VALID_GENRES ] })))
 
 del g
 

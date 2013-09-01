@@ -42,20 +42,20 @@ import traceback
 import re
 import os
 import os.path
-import pystache
-import lxml.etree
+# XSD validation: removed
+#import pystache
 import termcolor
-import Image
 import shutil
 import subprocess
 import inspect
 import tempfile
 import mimetypes
 import xml.dom.minidom
-import lxml.etree
+# XSD validation: removed
+#import lxml.etree
 import mutagen
+
 import yaml
-import xspf
 
 
 #############
@@ -71,17 +71,16 @@ METADATA_FILE = u"metadata.xml"
 
 COVER_IMAGE = u"folder.jpg"
 
-THUMBNAIL_IMAGE = u"thumb.jpg"
-
 METADATA_XML_TEMPLATE = unicode(open(os.path.join(os.path.dirname(__file__), METADATA_FILE), 'r').read())
 
 VALID_GENRES = tuple(sorted(yaml.load(open(os.path.join(os.path.dirname(__file__), 'valid_genres.yml')))))
 
 VALID_MIME_TYPES = tuple(sorted(yaml.load(open(os.path.join(os.path.dirname(__file__), 'valid_mime_types.yml')))))
 
-ALBUM_XSD = lxml.etree.XMLSchema(lxml.etree.XML(pystache.render(open(os.path.join(os.path.dirname(__file__), 'album.xsd.mustache'), 'r').read(), { 'genres': [ { 'genre': g } for g in VALID_GENRES ] })))
-
-del g
+# XSD validation: removed
+#ALBUM_XSD = lxml.etree.XMLSchema(lxml.etree.XML(pystache.render(open(os.path.join(os.path.dirname(__file__), 'album.xsd.mustache'), 'r').read(), { 'genres': [ { 'genre': g } for g in VALID_GENRES ] })))
+#
+#del g
 
 
 ##################
@@ -157,7 +156,8 @@ class Album:
             raise Exception(self.directory + ": La cover non esiste")
 
         # leggi e valida il file di configurazione
-        ALBUM_XSD.assertValid(lxml.etree.parse(self.config_file))
+        # XSD validation: removed
+        #ALBUM_XSD.assertValid(lxml.etree.parse(self.config_file))
         config = xml.dom.minidom.parse(self.config_file)
 
         # controlla se l'album e' uno split
@@ -236,7 +236,6 @@ class Album:
     audiofiles  = property(fset = None, fget = lambda self: self.__get_audiofiles())
     config_file = property(fset = None, fget = lambda self: os.path.join(self.directory, METADATA_FILE) )
     cover_image = property(fset = None, fget = lambda self: os.path.join(self.directory, COVER_IMAGE))
-    thumbnail_image = property(fset = None, fget = lambda self: os.path.join(self.directory, THUMBNAIL_IMAGE))
 
 
     def check_unknown_files(self):
@@ -248,7 +247,7 @@ class Album:
         # cerca i file sconosciuti nella directory dell'album
         unknown = []
         for item in os.listdir(self.directory):
-            if item != METADATA_FILE and item != COVER_IMAGE and item != THUMBNAIL_IMAGE and mimetypes.guess_type(item)[0] not in VALID_MIME_TYPES:
+            if item != METADATA_FILE and item != COVER_IMAGE and mimetypes.guess_type(item)[0] not in VALID_MIME_TYPES:
                 unknown.append(item)
 
         # se ci sono dei file sconosciuti
@@ -316,27 +315,6 @@ class Album:
                 print_item("'" + os.path.split(audiofiles[item])[1] + "  -->  '" + os.path.split(new_track_name)[1] + "'")
                 # rinomina il file
                 os.rename(audiofiles[item], new_track_name)
-
-
-    def create_thumbnail(self):
-
-        '''Crea la miniatura della cover (64x64)'''
-
-        dest_size = 64
-        dest_width = dest_size
-        dest_height = dest_size
-
-        cover = Image.open(self.cover_image)
-        (width, height) = cover.size
-        ratio = dest_width / dest_height
-
-        if (ratio < 1):
-            dest_width = dest_height * ratio
-        else:
-            dest_height = dest_width / ratio
-
-        thumb = cover.resize((dest_width, dest_height), Image.ANTIALIAS)
-        thumb.save(self.thumbnail_image)
 
 
     def check_metadata(self):
@@ -441,22 +419,21 @@ class Album:
         self.check_unknown_files()
         self.check_crlf()
         
-        # temporarily disabled: jpeg support not available
-        #self.create_thumbnail()
-        
 
     def dump(self):
         
-        x = xspf.Xspf()
-        x.title = self.title
-        x.creator = self.author
-        x.date = self.year
- 
-        for track in self.tracklist:
-            x.add_track(xspf.Track(title = track))
- 
-        print xml.dom.minidom.parseString(re.sub(r'(:)?ns0(:)?', '', x.toXml())).toprettyxml()
+        obj = {
+            'author': self.author,
+            'title':  self.title,
+            'year':   self.year,
+            'genre':  self.genre
+        }
         
+        if self.is_split:
+            obj['split'] = self.split_index
+        
+        print yaml.dump(obj)
+
         
     def __get_audiofiles(self):
 
@@ -551,26 +528,6 @@ class ActionExecutor:
             if re.match('.*\.(mp3|m4a|ogg)$', track):
                 
                 print(os.path.splitext(track[int(args.chars):])[0].replace('_', ' ').capitalize())
-
-
-    def check_library(self, args):
-
-        '''Perform a consistency check on the given library'''
-    
-        if not os.path.isdir(args.path):
-            raise argparse.ArgumentError("'{0}' is not a valid path".format(args.path))
-
-        if not os.access(args.path, os.R_OK):
-            raise argparse.ArgumentError("'{0}' is not a readable dir".format(args.path))
-
-        # for each item in the given path
-        for item in os.listdir(args.path):
-            
-            # if the item is directory
-            if os.path.isdir(item):
-                
-                # perform the check
-                Album(os.path.join(args.path, item)).check()
 
 
     def test(self, args):
@@ -695,10 +652,6 @@ class ArgumentParser(argparse.ArgumentParser):
             infer_parser.add_argument('--path', help = 'Specify target path', default = '.')
             infer_parser.add_argument('chars', help = 'Specify the number of characters to remove from the beginning of the file name', default = '.')
             infer_parser.set_defaults(func = ns.infer_album)
-        
-            check_library_parser = self.subparsers.add_parser('checklibrary')
-            check_library_parser.add_argument('--path', help = 'Specify target path', default = '.')
-            check_library_parser.set_defaults(func = ns.check_library)
         
             genres_parser = self.subparsers.add_parser('genres')
             genres_parser.set_defaults(func = ns.print_genres)
